@@ -24,3 +24,15 @@ buscas %>%
     geom_histogram(binwidth = 5) 
 ```
 
+```{r}
+buscas.agrupado.por.dia <- buscas %>% 
+    group_by(date = substr(session_start_date, 1, 10), group) %>%
+    summarise(rate = mean(num_clicks))
+
+ggplot(buscas.agrupado.por.dia, aes(x = date, y = rate, color = group)) +
+    geom_point() +
+    theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(hjust = 1, angle = 45))
+    
+```
+
+
