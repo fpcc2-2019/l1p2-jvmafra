@@ -82,8 +82,6 @@ O segundo boxplot mostra as durações já excluindo os outliers.
 
 ```{r}
 
-buscas.por.sessao <- buscas %>% group_by(session_id) %>% summarise(session_length = first(session_length))
-
 buscas.por.sessao %>% 
     ggplot(aes(x = "session_length", y = session_length)) + 
     geom_boxplot(color = "#FF6666") +
@@ -107,12 +105,18 @@ Dado que as variáveis a serem usadas foram analisadas e algumas sessões foram 
 
 ## What is our daily overall clickthrough rate? How does it vary between the groups?
 
-Vamos medir a taxa de clique como sendo o número de cliques médio por busca
+Vamos medir a taxa de clique como sendo o número de sessões em que tivemos ao menos um clique dividido pelo total de sessões.
 
 ```{r}
-buscas.agrupado.por.dia <- buscas %>% 
+buscas.por.sessao <- buscas %>% group_by(session_id) %>% 
+    summarise(session_length = first(session_length), 
+              search_time = first(search_time), 
+              group = first(group),
+              sum_clicks = sum(num_clicks))
+
+buscas.agrupado.por.dia <- buscas.por.sessao %>% 
     group_by(date = substr(search_time, 1, 10), group) %>%
-    summarise(rate = mean(num_clicks), total = n())
+    summarise(rate = sum(sum_clicks > 0)/n())
 
 ggplot(buscas.agrupado.por.dia, aes(x = date, y = rate, group = group, color = group)) +
     geom_point() +
@@ -125,20 +129,34 @@ ggplot(buscas.agrupado.por.dia, aes(x = date, y = rate, group = group, color = g
 ## Which results do people tend to try first? How does it change day-to-day?
 
 ```{r}
-buscas.agrupado.por.dia.first.click <- buscas %>% 
+
+buscas.agrupado.por.dia.first.click <- buscas %>% na.omit(first_click)
+buscas.agrupado.por.dia.first.click <- buscas.agrupado.por.dia.first.click %>% 
     group_by(date = substr(search_time, 1, 10), group) %>%
     summarise(first_click_mean = mean(first_click), total = n())
 
-ggplot(buscas.agrupado.por.dia.first.click, aes(x = date, y = rate, group = group, color = group)) +
+ggplot(buscas.agrupado.por.dia.first.click, aes(x = date, y = first_click_mean, group = group, color = group)) +
     geom_point() +
     geom_line() +
-    labs(x = "Dia", y = "Taxa de cliques", color = "Grupo") +
+    labs(x = "Dia", y = "Primeiro clique médio", color = "Grupo") +
     theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(hjust = 1, angle = 45))
 ```
 
 
-
 ## What is our daily overall zero results rate? How does it vary between the groups?
+
+```{r}
+buscas.agrupado.por.dia.zero.results <- buscas %>% 
+    group_by(date = substr(search_time, 1, 10), group) %>%
+    summarise(zero_results_rate = sum(results == 0)/n())
+
+ggplot(buscas.agrupado.por.dia.zero.results, aes(x = date, y = zero_results_rate, group = group, color = group)) +
+    geom_point() +
+    geom_line() +
+    labs(x = "Dia", y = "Taxa de buscas com zero resultados", color = "Grupo") +
+    theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(hjust = 1, angle = 45))
+```
+
 
 
 ## Let session length be approximately the time between the first event and the last event in a session. Choose a variable from the dataset and describe its relationship to session length. Visualize the relationship.
