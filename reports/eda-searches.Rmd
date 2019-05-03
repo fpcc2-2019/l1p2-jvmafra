@@ -19,47 +19,123 @@ buscas = read_csv(here::here("data/search_data.csv"))
 names(buscas)[names(buscas) == "session_start_date"] <- "search_time"
 ```
 
-Investigando variáveis do problema:
+## Investigando as principais variáveis do problema:
 
-- Número de clicks
+- num_clicks
 - first_click
-- zero_results rate
+- results
 - session_lenght
+
+### Investigando a variável num_clicks:
+
+Em geral, a maioria das buscas não tem nenhum click em nenhum link como mostra a distribuição. O sumário ainda mostra que em aproximadamente 75% dos casos não temos nenhum click.
 
 ```{r}
 buscas %>% 
     ggplot(aes(x = num_clicks)) + 
-    geom_histogram(binwidth = 5) 
+    geom_histogram(binwidth = 5, fill = "#FF6666") +
+    labs(x = "Número de clicks na busca", y = "Clicks")
 
 summary(buscas$num_clicks)
 ```
 
+### Investigando a variável first_click:
 
-## What is our daily overall clickthrough rate? How does it vary between the groups?
+Em teoria ela indica em qual link o usuário clicou dado que ele clicou em algum resultado da busca. O boxplot mostra que existem buscas com valores muito elevados e que não fazem muito sentido. O usuário fez 18 buscas em uma sessão, cada busca retornou 20 resultados, mas o first_click mostra um valor exarcebado (4103 por exemplo). Todos esses outliers pertencem a essa mesma sessão, que será desconsiderada das futuras análises
 
-Taxa de cliques:
+```{r}
+buscas %>% 
+    ggplot(aes(x = "first_click", y = first_click)) + 
+    geom_boxplot(color = "#FF6666") +
+    labs(x = "Número de clicks na busca", y = "Frequência")
 
-- Número de clicks/Número de sessões?
-- Número de clicks médiao por busca? Implica na média da variável num_clicks
+summary(buscas$first_click)
+
+buscas <- buscas %>% filter(session_id != "5e0036c1b3bcd196")
+```
+
+### Investigando a variável results:
+
+Podemos observar duas modas principais: 0 resultados e 20 resultados. Provavelmente esse parâmetro é fixo em cada busca. Mostra 20 resultados por página, ou 50 por página ou até 500. Caso não exista resultado, obviamente o número de resultados é 0, se houver apenas 1 por exemplo, o número de resultados é 1.
 
 ```{r}
 buscas %>% 
     ggplot(aes(x = results)) + 
-    geom_histogram(binwidth = 5) 
+    geom_histogram(binwidth = 5, fill = "#FF6666") +
+    labs(x = "Resultados da busca", y = "Frequência")
+
+buscas %>% 
+    ggplot(aes(x = "results", y = results)) + 
+    geom_boxplot(color = "#FF6666") +
+    labs(x = "Resultados", y = "Número de resultados")
+
+summary(buscas$results)
 ```
+
+### Investigando a variável session_length
+
+Representa a duração da sessão. Em cada sessão podem ser feitas várias buscas.
+
+Pelo boxplot vemos que a distribuição faz sentido com exceção de 2 pontos, que mostram durações de sessões bem acimas do normal (6 dias e 2 dias). Eles impactam diretamente na média, pois como podemos ver a mediana é de apenas 15 segundos e a média de 153 segundos. Essas duas sessões também serão desconsideradas das análises futuras.
+
+O segundo boxplot mostra as durações já excluindo os outliers.
+
+```{r}
+
+buscas.por.sessao <- buscas %>% group_by(session_id) %>% summarise(session_length = first(session_length))
+
+buscas.por.sessao %>% 
+    ggplot(aes(x = "session_length", y = session_length)) + 
+    geom_boxplot(color = "#FF6666") +
+    labs(x = "Duração da sessão", y = "Frequência")
+
+summary(buscas.por.sessao$session_length)
+
+buscas <- buscas %>% filter(session_id != "8cf57f4f99f96220" & session_id != "e52d0c1117fc07eb")
+
+buscas.por.sessao <- buscas.por.sessao %>% filter(session_id != "8cf57f4f99f96220" & session_id != "e52d0c1117fc07eb")
+
+buscas.por.sessao %>% 
+    ggplot(aes(x = "session_length", y = session_length)) + 
+    geom_boxplot(color = "#FF6666") +
+    labs(x = "Duração da sessão", y = "Frequência")
+
+```
+
+
+Dado que as variáveis a serem usadas foram analisadas e algumas sessões foram desconsideradas, vamos responder às perguntas de fato.
+
+## What is our daily overall clickthrough rate? How does it vary between the groups?
+
+Vamos medir a taxa de clique como sendo o número de cliques médio por busca
 
 ```{r}
 buscas.agrupado.por.dia <- buscas %>% 
-    group_by(date = substr(session_start_date, 1, 10), group) %>%
-    summarise(rate = mean(num_clicks))
+    group_by(date = substr(search_time, 1, 10), group) %>%
+    summarise(rate = mean(num_clicks), total = n())
 
-ggplot(buscas.agrupado.por.dia, aes(x = date, y = rate, color = group)) +
+ggplot(buscas.agrupado.por.dia, aes(x = date, y = rate, group = group, color = group)) +
     geom_point() +
+    geom_line() +
+    labs(x = "Dia", y = "Taxa de cliques", color = "Grupo") +
     theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(hjust = 1, angle = 45))
     
 ```
 
 ## Which results do people tend to try first? How does it change day-to-day?
+
+```{r}
+buscas.agrupado.por.dia.first.click <- buscas %>% 
+    group_by(date = substr(search_time, 1, 10), group) %>%
+    summarise(first_click_mean = mean(first_click), total = n())
+
+ggplot(buscas.agrupado.por.dia.first.click, aes(x = date, y = rate, group = group, color = group)) +
+    geom_point() +
+    geom_line() +
+    labs(x = "Dia", y = "Taxa de cliques", color = "Grupo") +
+    theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(hjust = 1, angle = 45))
+```
+
 
 
 ## What is our daily overall zero results rate? How does it vary between the groups?
