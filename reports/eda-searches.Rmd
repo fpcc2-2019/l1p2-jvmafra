@@ -16,7 +16,31 @@ theme_set(theme_bw())
 
 ```{r ETL}
 buscas = read_csv(here::here("data/search_data.csv"))
+names(buscas)[names(buscas) == "session_start_date"] <- "search_time"
 ```
+
+Investigando variáveis do problema:
+
+- Número de clicks
+- first_click
+- zero_results rate
+- session_lenght
+
+```{r}
+buscas %>% 
+    ggplot(aes(x = num_clicks)) + 
+    geom_histogram(binwidth = 5) 
+
+summary(buscas$num_clicks)
+```
+
+
+## What is our daily overall clickthrough rate? How does it vary between the groups?
+
+Taxa de cliques:
+
+- Número de clicks/Número de sessões?
+- Número de clicks médiao por busca? Implica na média da variável num_clicks
 
 ```{r}
 buscas %>% 
@@ -34,5 +58,13 @@ ggplot(buscas.agrupado.por.dia, aes(x = date, y = rate, color = group)) +
     theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(hjust = 1, angle = 45))
     
 ```
+
+## Which results do people tend to try first? How does it change day-to-day?
+
+
+## What is our daily overall zero results rate? How does it vary between the groups?
+
+
+## Let session length be approximately the time between the first event and the last event in a session. Choose a variable from the dataset and describe its relationship to session length. Visualize the relationship.
 
 
