@@ -1,17 +1,34 @@
 ---
-title: "EDA buscas"
-output: html_notebook
+title: "Sessões, buscas e navegação na wikimedia"
+author: "João Victor Mafra"
+output:
+  prettydoc::html_pretty:
+    df_print: kable
+    theme: tactile
+    highlight: github
 ---
+
+<style>
+body {
+text-align: justify}
+</style>
 
 O objeto principal da análise são as buscas e a navegação depois da busca. Criamos esses dados a partir dos dados originais da wikimedia em `/data/search_data.csv`. 
 
 Aqui, exploramos esses dados. 
 
-```{r setup}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(here)
 library(lubridate)
 theme_set(theme_bw())
+
+knitr::opts_chunk$set(tidy = FALSE,
+                      fig.width = 8,
+                      fig.height = 6,
+                      echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
 ```
 
 ```{r ETL}
@@ -24,30 +41,35 @@ names(buscas)[names(buscas) == "session_start_date"] <- "search_time"
 - num_clicks
 - first_click
 - results
-- session_lenght
+- session_length
 
 ### Investigando a variável num_clicks:
 
-Em geral, a maioria das buscas não tem nenhum click em nenhum link como mostra a distribuição. O sumário ainda mostra que em aproximadamente 75% dos casos não temos nenhum click.
+Em geral, a maioria das buscas não tem nenhum clique em nenhum link como mostra a distribuição (Aproxidamente em 75% do casos).
+
+A distribuição mostra apenas buscas com menos de 10 cliques, tendo em vista que em apenas 35 casos tiveram mais cliques que isso.
 
 ```{r}
 buscas %>% 
+    filter(num_clicks < 10) %>%
     ggplot(aes(x = num_clicks)) + 
-    geom_histogram(binwidth = 5, fill = "#FF6666") +
-    labs(x = "Número de clicks na busca", y = "Clicks")
+    geom_histogram(bins = 10, fill = "#FF6666") +
+    labs(x = "Número de cliques na busca", y = "Frequência")
 
 summary(buscas$num_clicks)
+
+nrow(buscas %>% filter(num_clicks >= 10))
 ```
 
 ### Investigando a variável first_click:
 
-Em teoria ela indica em qual link o usuário clicou dado que ele clicou em algum resultado da busca. O boxplot mostra que existem buscas com valores muito elevados e que não fazem muito sentido. O usuário fez 18 buscas em uma sessão, cada busca retornou 20 resultados, mas o first_click mostra um valor exarcebado (4103 por exemplo). Todos esses outliers pertencem a essa mesma sessão, que será desconsiderada das futuras análises
+Ela indica em qual link o usuário clicou dado que ele clicou em algum resultado da busca. O boxplot mostra que existem buscas com valores muito elevados e que não fazem muito sentido. O usuário fez 18 buscas em uma determinada sessão e cada busca retornou 20 resultados, mas o first_click mostra um valor exarcebado (4103 por exemplo). Todos esses outliers pertencem a essa mesma sessão, que será desconsiderada das futuras análises.
 
 ```{r}
 buscas %>% 
     ggplot(aes(x = "first_click", y = first_click)) + 
     geom_boxplot(color = "#FF6666") +
-    labs(x = "Número de clicks na busca", y = "Frequência")
+    labs(x = "Distribuição: Primeiro clique", y = "Primeiro clique")
 
 summary(buscas$first_click)
 
@@ -76,27 +98,38 @@ summary(buscas$results)
 
 Representa a duração da sessão. Em cada sessão podem ser feitas várias buscas.
 
-Pelo boxplot vemos que a distribuição faz sentido com exceção de 2 pontos, que mostram durações de sessões bem acimas do normal (6 dias e 2 dias). Eles impactam diretamente na média, pois como podemos ver a mediana é de apenas 15 segundos e a média de 153 segundos. Essas duas sessões também serão desconsideradas das análises futuras.
+Pelo boxplot vemos que a distribuição faz sentido com exceção de 2 pontos, que mostram durações de sessões bem acima do normal (6 dias e 2 dias). Eles impactam diretamente na média, pois como podemos ver a mediana é de apenas 15 segundos e a média de 153 segundos. Essas duas sessões também serão desconsideradas das análises futuras.
 
-O segundo boxplot mostra as durações já excluindo os outliers.
+O histograma considera apenas sessões com durações menores que 50 minutos. Apenas 110 das 67950 sessões possuem duração acima disso. Temos uma moda em durações muito pequenas (A mediana é de apenas 15 segundos) e outra moda em um valor próximo de 8 minutos de duração.
 
 ```{r}
 
+buscas.por.sessao <- buscas %>% group_by(session_id) %>% 
+    summarise(session_length = first(session_length), 
+              search_time = first(search_time), 
+              group = first(group),
+              sum_clicks = sum(num_clicks),
+              sum_results = sum(results),
+              total_searches = n())
+
 buscas.por.sessao %>% 
-    ggplot(aes(x = "session_length", y = session_length)) + 
+    ggplot(aes(x = "session_length", y = session_length/60)) + 
     geom_boxplot(color = "#FF6666") +
-    labs(x = "Duração da sessão", y = "Frequência")
+    labs(x = "Distribuição da duração da sessão", y = "Duração da sessão (seg)")
+
+buscas.por.sessao %>% 
+    filter(session_length < 3000) %>%
+    ggplot(aes(x = session_length)) + 
+    geom_histogram(fill = "#FF6666", bins = 50) +
+    labs(x = "Duração da sessão (seg)", y = "Frequência")
+
+nrow(buscas.por.sessao %>% filter(session_length >= 3000))
 
 summary(buscas.por.sessao$session_length)
 
 buscas <- buscas %>% filter(session_id != "8cf57f4f99f96220" & session_id != "e52d0c1117fc07eb")
 
 buscas.por.sessao <- buscas.por.sessao %>% filter(session_id != "8cf57f4f99f96220" & session_id != "e52d0c1117fc07eb")
-
-buscas.por.sessao %>% 
-    ggplot(aes(x = "session_length", y = session_length)) + 
-    geom_boxplot(color = "#FF6666") +
-    labs(x = "Duração da sessão", y = "Frequência")
 
 ```
 
@@ -107,58 +140,168 @@ Dado que as variáveis a serem usadas foram analisadas e algumas sessões foram 
 
 Vamos medir a taxa de clique como sendo o número de sessões em que tivemos ao menos um clique dividido pelo total de sessões.
 
+O grupo A possui um clickthrough rate próximo dos 70% para todos os dias, número bem acima do grupo B, que mostra até alguma evolução diária mas não ultrapassa os 20%.
+
 ```{r}
-buscas.por.sessao <- buscas %>% group_by(session_id) %>% 
-    summarise(session_length = first(session_length), 
-              search_time = first(search_time), 
-              group = first(group),
-              sum_clicks = sum(num_clicks))
 
 buscas.agrupado.por.dia <- buscas.por.sessao %>% 
     group_by(date = substr(search_time, 1, 10), group) %>%
     summarise(rate = sum(sum_clicks > 0)/n())
 
-ggplot(buscas.agrupado.por.dia, aes(x = date, y = rate, group = group, color = group)) +
+ggplot(buscas.agrupado.por.dia, aes(x = date, y = 100*rate, group = group, color = group)) +
     geom_point() +
     geom_line() +
-    labs(x = "Dia", y = "Taxa de cliques", color = "Grupo") +
+    labs(x = "Dia", y = "Taxa de cliques (%)", color = "Grupo") +
     theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(hjust = 1, angle = 45))
     
 ```
 
 ## Which results do people tend to try first? How does it change day-to-day?
 
+Serão consideradas apenas as buscas em que o usuário clicou em algum resultado. Dado que ele clicou, qual link foi o primeiro clicado?
+
+Inicialmente temos a distribuição da variável através de um histograma que considera apenas buscas cujo primeiro clique é menor que 25. Apenas 283 buscas das 136.203 tiveram um primeiro clique com valor maior ou igual a 25. Como esperado, o gráfico mostra que na maioria dos casos o usuário clica no primeiro link (ou nos primeiros links) da busca, tendo em vista que o 75-percentil é o segundo link.
+
+A média pode ser impactada por valores extremos e a mediana é 1 para todos os dias e grupos. Por isso, será calculado também o 95-percentil, que indica que em 95% dos casos o primeiro link clicado está abaixo daquele valor.
+
 ```{r}
+
+buscas %>% 
+    filter(first_click < 25) %>%
+    ggplot(aes(x = first_click)) + 
+    geom_histogram(fill = "#FF6666", bins = 20) +
+    labs(x = "Primeiro click", y = "Frequência")
+
+nrow(buscas %>% filter(first_click >= 25))
+
+summary(buscas$first_click)
 
 buscas.agrupado.por.dia.first.click <- buscas %>% na.omit(first_click)
 buscas.agrupado.por.dia.first.click <- buscas.agrupado.por.dia.first.click %>% 
     group_by(date = substr(search_time, 1, 10), group) %>%
-    summarise(first_click_mean = mean(first_click), total = n())
+    summarise(first_click_mean = mean(first_click), 
+              first_click_median = median(first_click),
+              percentil = quantile(first_click, c(.95)),
+              total = n())
 
+
+
+```
+
+O primeiro gráfico mostra a média do primeiro clique. O Grupo B é mais bem comportado, e em média o primeiro clique é no link 2. Isso se mantém ao longo dos dias. Para o Grupo A temos uma variação bem maior dos dados ao longo dos dias, com uma média bem maior em geral. Existe um dia cujo o primeiro clique médio foi no 9º link, um valor muito acima dos demais dias.
+
+```{r}
 ggplot(buscas.agrupado.por.dia.first.click, aes(x = date, y = first_click_mean, group = group, color = group)) +
-    geom_point() +
+    geom_point() + 
     geom_line() +
     labs(x = "Dia", y = "Primeiro clique médio", color = "Grupo") +
     theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(hjust = 1, angle = 45))
 ```
 
 
+Agora temos o gráfico representando o 95-percentil do primeiro clique ao longo dos dias. Como esperado devido à visualização anterior, o 95-percentil do Grupo A é maior no geral.
+
+Grupo A: Em geral, 95% dos "primeiro cliques" estão abaixo do 10º link, com um pico dia 04/03, em que o 95-percentil está no 14º link.
+
+Grupo B:  Em geral, 95% dos "primeiro cliques" estão abaixo do 6º link, atigindo seu maior valor no último dia, quando o 95-percentil está no 7º link.
+
+```{r}
+ggplot(buscas.agrupado.por.dia.first.click, aes(x = date, y = percentil, group = group, color = group)) +
+    geom_point() + 
+    geom_line() +
+    scale_y_discrete(limits = c(5:14)) +
+    labs(x = "Dia", y = "95-percentil do primeiro clique", color = "Grupo") +
+    theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(hjust = 1, angle = 45))
+```
+
+
 ## What is our daily overall zero results rate? How does it vary between the groups?
+
+Essa variável representa o número de buscas em que não foi obtido nenhum resultado dividido pelo total de buscas.
+
+A visualização mostra que nesse caso não existe um grupo "melhor" que o outro. A taxa varia ao longo dos dias de tal forma que em metade deles o grupo A aparece com uma taxa maior de "zero resultados" (Dias 2, 4, 7 e 8) e o grupo B aparece com uma taxa maior nos outros 4 dias. Apesar disso, essa taxa não varia muito, com amplitude entre 16% e 18% para todos os dias e grupos. 
 
 ```{r}
 buscas.agrupado.por.dia.zero.results <- buscas %>% 
     group_by(date = substr(search_time, 1, 10), group) %>%
     summarise(zero_results_rate = sum(results == 0)/n())
 
-ggplot(buscas.agrupado.por.dia.zero.results, aes(x = date, y = zero_results_rate, group = group, color = group)) +
+ggplot(buscas.agrupado.por.dia.zero.results, aes(x = date, y = 100 * zero_results_rate, group = group, color = group)) +
     geom_point() +
     geom_line() +
-    labs(x = "Dia", y = "Taxa de buscas com zero resultados", color = "Grupo") +
+    labs(x = "Dia", y = "Taxa de buscas com zero resultados (%)", color = "Grupo") +
     theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(hjust = 1, angle = 45))
 ```
 
 
 
 ## Let session length be approximately the time between the first event and the last event in a session. Choose a variable from the dataset and describe its relationship to session length. Visualize the relationship.
+
+
+```{r}
+buscas.por.sessao.filtrado <- buscas.por.sessao %>% select(session_length, group, sum_clicks, sum_results, total_searches)
+```
+
+
+### Duração da sessão x Número de cliques
+
+Será investigado se existe alguma relação entre a duração da sessão e o número totais de cliques que foram dados na mesma. Espera-se que exista já que de forma intuitiva espera-se quanto mais tempo uma pessoa passe numa sessão mais vezes ela clique nas buscas que são feitas.
+
+Como temos muitos pontos concentrados nas mesmas regiões, será usado o geom_hex, que concentra os pontos de uma região em um hexágono só, facilitando a visualização. A tonalidade indica a quantidade de pontos concentrados naquela área.
+
+Além disso, o eixo x (que representação a duração da sessão), será mostrado em escala de log por causa de algumas durações muito altas.
+
+Como podemos ver, temos certa tendência de aumento no número de cliques quando a sessão dura mais. Apesar disso, na grande maioria dos casos o número de cliques ainda é muito pequeno independente da duração da sessão.
+
+Calculando os coeficientes de correlação usando dois métodos temos:
+
+Pearson: Mede se existe uma correlação linear entre as variáveis. O valor obtido de apenas 0.17 confirma o que diz o gráfico, de que até existe uma relação, mas ela não é linerar.
+
+Spearman: Mede se existe alguma relação monótona entre as variáveis, seja ela linear ou não. O valor obtido de 0.71 mostra que existe uma correlação alta e positiva entre as duas variáveis, conforme esperado.
+
+```{r}
+
+buscas.por.sessao.filtrado %>% 
+    ggplot(aes(x = session_length, y = sum_clicks)) +
+    geom_hex() +
+    scale_x_log10() +
+    labs(x = "Duração da sessão (seg)", y = "Número de cliques na sessão")
+
+correlacoes.clicks <- buscas.por.sessao.filtrado %>% 
+    summarise(cor_pearson = cor(session_length, sum_clicks, method = "pearson"),
+              cor_spearman = cor(session_length, sum_clicks, method = "spearman"))
+
+correlacoes.clicks
+
+```
+
+### Duração da sessão x Número de buscas feitas
+
+Será investigado se existe alguma relação entre a duração da sessão e o número totais de buscas que foram feitas na mesma. Espera-se que exista já que de forma intuitiva espera-se quanto mais tempo uma pessoa passe numa sessão mais pesquisas ela faça.
+
+Assim como no caso anterior, temos certa tendência de aumento no número de buscas quando a sessão dura mais, mas essa relação não é linear
+
+Calculando os coeficientes de correlação usando os mesmos dois métodos temos:
+
+Pearson: O valor obtido de apenas 0.16 confirma o que diz o gráfico, de que até existe uma relação, mas ela não é linerar.
+
+Spearman: O valor obtido de 0.59 mostra que existe uma correlação positiva entre as duas variáveis, mas ela não é tão alta assim, apesar de estar mais próximo do 1 que do 0.
+
+
+```{r}
+buscas.por.sessao.filtrado %>% 
+    ggplot(aes(x = session_length, y = total_searches)) +
+    geom_hex() +
+    scale_x_log10() +
+    labs(x = "Duração da sessão (seg)", y = "Número de buscas na sessão")
+
+correlacoes.buscas <- buscas.por.sessao.filtrado %>% 
+    summarise(cor_pearson = cor(session_length, total_searches, method = "pearson"),
+              cor_spearman = cor(session_length, total_searches, method = "spearman"))
+
+correlacoes.buscas
+```
+
+
 
 
