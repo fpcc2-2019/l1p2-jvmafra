@@ -1,0 +1,116 @@
+---
+title: "inferencia-wikimedia"
+output: html_document
+---
+
+```{r setup}
+library(tidyverse)
+library(here)
+library(lubridate)
+theme_set(theme_bw())
+```
+
+```{r ETL}
+buscas = read_csv(here::here("data/search_data.csv"))
+names(buscas)[names(buscas) == "session_start_date"] <- "search_time"
+```
+
+### clickthrough rate com p-valor
+
+```{r}
+
+buscas.por.sessao <- buscas %>% group_by(session_id, group) %>% 
+    summarise(session_length = first(session_length), 
+              search_time = first(search_time), 
+              sum_clicks = sum(num_clicks),
+              sum_results = sum(results)) %>%
+    ungroup()
+
+
+theta_diff_rate = function(buscas, i){
+    rates = buscas %>%
+        slice(i) %>%
+        group_by(group) %>% 
+        summarise(rate = sum(sum_clicks > 0)/n()) 
+    
+    group.a = rates %>% filter(group == "a") %>% pull(rate)
+    group.b = rates %>% filter(group == "b") %>% pull(rate)
+    
+    group.a - group.b
+}
+
+theta_embaralhado = function(buscas){
+    rates = buscas %>% 
+        mutate(grupo_embaralhado = sample(group, n())) %>% 
+        group_by(grupo_embaralhado) %>% 
+        summarise(rate = sum(sum_clicks > 0)/n()) 
+    
+    group.a = rates %>% filter(grupo_embaralhado == "a") %>% pull(rate)
+    group.b = rates %>% filter(grupo_embaralhado == "b") %>% pull(rate)
+    
+    group.a - group.b
+}
+
+
+
+theta_embaralhado(buscas.por.sessao)
+theta_diff_rate(buscas.por.sessao, 1:NROW(buscas.por.sessao))
+
+
+diffs1 = replicate(2000, {theta_embaralhado(buscas.por.sessao)})
+tibble(diferenca = diffs1) %>% 
+  ggplot(aes(x = diferenca)) + 
+  # geom_histogram(binwidth = .2, fill = "white", color = "darkgreen") + 
+    geom_density(fill = "white", color = "darkgreen") + 
+  geom_vline(xintercept = theta_diff_rate(buscas.por.sessao, 1:NROW(buscas.por.sessao)), 
+             color = "orange") + 
+    geom_vline(xintercept = - theta_diff_rate(buscas.por.sessao, 1:NROW(buscas.por.sessao)), 
+             color = "orange") + 
+    geom_rug()
+
+
+p.value <- mean(abs(diffs1) >= abs(theta_diff_rate(buscas.por.sessao, 1:NROW(buscas.por.sessao))))
+p.value
+```
+
+
+### Proporção de buscas com zero resultados com p-valor
+
+```{r}
+
+theta_diff_zero_results_rate = function(buscas, i){
+    zero_results_rates = buscas %>%
+        slice(i) %>%
+        group_by(group) %>% 
+        summarise(zero_results_rate = sum(results == 0)/n()) 
+    
+    group.a = zero_results_rates %>% filter(group == "a") %>% pull(zero_results_rate)
+    group.b = zero_results_rates %>% filter(group == "b") %>% pull(zero_results_rate)
+    
+    group.a - group.b
+}
+
+theta_embaralhado_zero_results = function(buscas){
+    zero_results_rates = buscas %>% 
+        mutate(grupo_embaralhado = sample(group, n())) %>% 
+        group_by(grupo_embaralhado) %>% 
+        summarise(zero_results_rate = sum(results == 0)/n()) 
+    
+    group.a = zero_results_rates %>% filter(grupo_embaralhado == "a") %>% pull(zero_results_rate)
+    group.b = zero_results_rates %>% filter(grupo_embaralhado == "b") %>% pull(zero_results_rate)
+    
+    group.a - group.b
+}
+
+theta_embaralhado_zero_results(buscas)
+theta_diff_zero_results_rate(buscas, 1:NROW(buscas))
+
+diffs_zero_results = replicate(2000, {theta_embaralhado_zero_results(buscas)})
+p.value <- mean(abs(diffs_zero_results) >= abs(theta_diff_zero_results_rate(buscas, 1:NROW(buscas))))
+p.value
+
+```
+
+
+
+
