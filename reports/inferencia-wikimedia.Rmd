@@ -7,6 +7,8 @@ output: html_document
 library(tidyverse)
 library(here)
 library(lubridate)
+library(boot)
+library(broom)
 theme_set(theme_bw())
 ```
 
@@ -54,7 +56,7 @@ theta_embaralhado = function(buscas){
 
 
 theta_embaralhado(buscas.por.sessao)
-theta_diff_rate(buscas.por.sessao, 1:NROW(buscas.por.sessao))
+theta_c <- theta_diff_rate(buscas.por.sessao, 1:NROW(buscas.por.sessao))
 
 
 diffs1 = replicate(2000, {theta_embaralhado(buscas.por.sessao)})
@@ -72,6 +74,48 @@ tibble(diferenca = diffs1) %>%
 p.value <- mean(abs(diffs1) >= abs(theta_diff_rate(buscas.por.sessao, 1:NROW(buscas.por.sessao))))
 p.value
 ```
+
+
+### clickthrough rate com IC
+
+```{r}
+bootstrap = function(df){
+  boot <- sample_n(df,           
+                   size = NROW(df),
+                   replace = TRUE)
+  
+  rates = boot %>%
+        group_by(group) %>% 
+        summarise(rate = sum(sum_clicks > 0)/n()) 
+    
+    group.a = rates %>% filter(group == "a") %>% pull(rate)
+    group.b = rates %>% filter(group == "b") %>% pull(rate)
+    
+    diff <- group.a - group.b 
+  
+  return(diff)
+}
+
+repeticoes <- 2000
+reamostragens = tibble(i = 1:repeticoes) %>% 
+  mutate(theta_c_s = map_dbl(i, ~ bootstrap(buscas.por.sessao)))
+
+erro.amostral = reamostragens %>% 
+  mutate(erro = theta_c_s - theta_c)
+
+intervalo = erro.amostral %>% 
+  summarise(erro_i = quantile(erro, .025), 
+            erro_s = quantile(erro, .975))
+intervalo
+
+ci = intervalo %>% 
+  mutate(valor_i = theta_c + erro_i, 
+         valor_s = theta_c + erro_s)
+ci$valor_i
+ci$valor_s
+```
+
+
 
 
 ### Proporção de buscas com zero resultados com p-valor
@@ -103,11 +147,51 @@ theta_embaralhado_zero_results = function(buscas){
 }
 
 theta_embaralhado_zero_results(buscas)
-theta_diff_zero_results_rate(buscas, 1:NROW(buscas))
+theta_c_zero <- theta_diff_zero_results_rate(buscas, 1:NROW(buscas))
 
 diffs_zero_results = replicate(2000, {theta_embaralhado_zero_results(buscas)})
 p.value <- mean(abs(diffs_zero_results) >= abs(theta_diff_zero_results_rate(buscas, 1:NROW(buscas))))
 p.value
+
+```
+
+### Zero results rate com IC
+```{r}
+
+bootstrap_z = function(df){
+  boot <- sample_n(df,           
+                   size = NROW(df),
+                   replace = TRUE)
+  
+  rates = boot %>%
+        group_by(group) %>% 
+        summarise(zero_results_rate = sum(results == 0)/n()) 
+    
+    group.a = rates %>% filter(group == "a") %>% pull(zero_results_rate)
+    group.b = rates %>% filter(group == "b") %>% pull(zero_results_rate)
+    
+    diff <- group.a - group.b 
+  
+  return(diff)
+}
+
+repeticoes <- 2000
+reamostragens_z = tibble(i = 1:repeticoes) %>% 
+  mutate(theta_c_s_z = map_dbl(i, ~ bootstrap_z(buscas)))
+
+erro.amostral.z = reamostragens_z %>% 
+  mutate(erro = theta_c_s_z - theta_c_zero)
+
+intervalo.z = erro.amostral.z %>% 
+  summarise(erro_i = quantile(erro, .025), 
+            erro_s = quantile(erro, .975))
+intervalo.z
+
+ci.z = intervalo.z %>% 
+  mutate(valor_i = theta_c_zero + erro_i, 
+         valor_s = theta_c_zero + erro_s)
+ci.z$valor_i
+ci.z$valor_s
 
 ```
 
